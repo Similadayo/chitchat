@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
@@ -80,4 +81,14 @@ func ExtractClaims(tokenString string) (*Claims, error) {
 func ValidateJwt(tokenString string) bool {
 	_, err := ParseJwt(tokenString)
 	return err == nil
+}
+
+// Define a custom type for the context key
+type contextKey string
+
+const usernameKey contextKey = "username"
+
+// SetUserInContext sets the username in the request context
+func SetUserInContext(ctx context.Context, username string) context.Context {
+	return context.WithValue(ctx, usernameKey, username)
 }
