@@ -18,7 +18,7 @@ type Claims struct {
 }
 
 // GenerateJwt generates a new JWT token
-func GenerateJwt(username, role string) (string, error) {
+func GenerateJwt(username string) (string, error) {
 	claims := &Claims{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
