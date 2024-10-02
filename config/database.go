@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"github/similadayo/chitchat/models"
+	"log"
 	"os"
 
 	"gorm.io/driver/mysql"
@@ -30,15 +32,11 @@ func ConnectDB() (*gorm.DB, error) {
 
 // MigrateDB performs database migration
 func MigrateDB(db *gorm.DB) {
-	// Define your models here
-	// Example:
-	// db.AutoMigrate(&User{})
 
-	// Uncomment and replace with your models
-	// err := db.AutoMigrate(&YourModel{})
-	// if err != nil {
-	// 	log.Fatalf("Error migrating database: %v", err)
-	// }
+	err := db.AutoMigrate(&models.User{})
+	if err != nil {
+		log.Fatalf("Error migrating database: %v", err)
+	}
 }
 
 // CloseDB closes the database connection
