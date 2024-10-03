@@ -75,13 +75,13 @@ func (uc *UserController) LoginUser(w http.ResponseWriter, r *http.Request) {
 	//Check if the user exists
 	var existingUser models.User
 	if err := uc.DB.Where("email = ?", user.Email).First(&existingUser).Error; err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials email", http.StatusUnauthorized)
 		return
 	}
 
 	//Check if the password is correct
 	if err := utils.ComparePasswords(user.Password, existingUser.Password); err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials password", http.StatusUnauthorized)
 		return
 	}
 
