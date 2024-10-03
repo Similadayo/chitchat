@@ -80,7 +80,7 @@ func (uc *UserController) LoginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Check if the password is correct
-	if err := utils.ComparePasswords(user.Password, existingUser.Password); err != nil {
+	if err := utils.ComparePasswords(existingUser.Password, user.Password); err != nil {
 		http.Error(w, "Invalid credentials password", http.StatusUnauthorized)
 		return
 	}
