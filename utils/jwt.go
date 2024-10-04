@@ -92,3 +92,9 @@ const usernameKey contextKey = "username"
 func SetUserInContext(ctx context.Context, username string) context.Context {
 	return context.WithValue(ctx, usernameKey, username)
 }
+
+// GetUserFromContext gets the username from the request context
+func GetUserFromContext(ctx context.Context) (string, bool) {
+	username, ok := ctx.Value(usernameKey).(string)
+	return username, ok
+}

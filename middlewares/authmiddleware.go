@@ -19,14 +19,15 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Extract the token from the Authorization header
-		tokenStrings := strings.Split(authHeader, " ")[1]
-		if tokenStrings == "" {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+		tokenStrings := strings.Split(authHeader, " ")
+		if len(tokenStrings) < 2 || tokenStrings[1] == "" {
+			http.Error(w, "Invalid token format", http.StatusUnauthorized)
 			return
 		}
+		tokenString := tokenStrings[1]
 
 		// Parse the JWT token
-		claims, err := utils.ParseJwt(tokenStrings)
+		claims, err := utils.ParseJwt(tokenString)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -35,10 +36,10 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Set the username in the request context
 		r = r.WithContext(utils.SetUserInContext(r.Context(), claims.Username))
 
-		// Proceed to the next middleware or handler
-		fmt.Println("User is authenticated", claims.Username)
-		next.ServeHTTP(w, r)
+		fmt.Println("User is authenticated:", claims.Username)
 
+		// Proceed to the next middleware or handler
+		next.ServeHTTP(w, r)
 	})
 }
 
