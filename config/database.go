@@ -33,7 +33,7 @@ func ConnectDB() (*gorm.DB, error) {
 // MigrateDB performs database migration
 func MigrateDB(db *gorm.DB) {
 
-	err := db.AutoMigrate(&models.User{})
+	err := db.AutoMigrate(&models.User{}, &models.Message{})
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
 	}
