@@ -98,3 +98,14 @@ func GetUserFromContext(ctx context.Context) (string, bool) {
 	username, ok := ctx.Value(usernameKey).(string)
 	return username, ok
 }
+
+// Define the User type
+type User struct {
+	Username string `json:"username"`
+	// Add other fields as needed
+}
+
+// SetUserToContext sets the user in the request context
+func SetUserToContext(ctx context.Context, user User) context.Context {
+	return context.WithValue(ctx, usernameKey, user)
+}
