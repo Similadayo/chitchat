@@ -32,13 +32,13 @@ func NewUserController() *UserController {
 func (uc *UserController) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 
-	//Parse the request body
+	// Parse the request body
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	//Hash the password before saving the user
+	// Hash the password before saving the user
 	hashedPassword, err := utils.HashPassword(user.Password)
 	if err != nil {
 		http.Error(w, "Could not hash the password", http.StatusInternalServerError)
@@ -46,20 +46,20 @@ func (uc *UserController) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user.Password = hashedPassword
 
-	//handles image upload for profile picture
+	// Handle image upload for profile picture
 	file, handler, err := r.FormFile("profile_pic")
 	if err == nil {
 		defer file.Close()
 		user.ProfilePic = handler.Filename
 	}
 
-	//Save the user in the database
+	// Save the user in the database
 	if err := uc.DB.Create(&user).Error; err != nil {
 		http.Error(w, "Could not save the user", http.StatusInternalServerError)
 		return
 	}
 
-	//Respond with success message
+	// Respond with success message
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User created successfully"})
@@ -69,37 +69,39 @@ func (uc *UserController) RegisterUser(w http.ResponseWriter, r *http.Request) {
 func (uc *UserController) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 
-	//Parse the request body
+	// Parse the request body
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	//Check if the user exists
+	// Check if the user exists
 	var existingUser models.User
 	if err := uc.DB.Where("email = ?", user.Email).First(&existingUser).Error; err != nil {
-		http.Error(w, "Invalid credentials email", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	//Check if the password is correct
+	// Check if the password is correct
 	if err := utils.ComparePasswords(existingUser.Password, user.Password); err != nil {
-		http.Error(w, "Invalid credentials password", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	//Generate a JWT token for the authenticated User
+	// Generate a JWT token for the authenticated user
 	token, err := utils.GenerateJwt(existingUser.Username)
 	if err != nil {
 		http.Error(w, "Could not generate JWT token", http.StatusInternalServerError)
 		return
 	}
 
-	//Respond with the token
+	// Respond with the token
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
+
+// Other functions (e.g., update user, delete user, etc.) can be added similarly.
 
 // GetUserProfile fetches the profile of the currently logged-in user
 func (uc *UserController) GetUserProfile(w http.ResponseWriter, r *http.Request) {
