@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -108,4 +109,18 @@ type User struct {
 // SetUserToContext sets the user in the request context
 func SetUserToContext(ctx context.Context, user User) context.Context {
 	return context.WithValue(ctx, usernameKey, user)
+}
+
+func ConvertToUint(s string) (uint, error) {
+
+	i, err := strconv.Atoi(s)
+
+	if err != nil {
+
+		return 0, err
+
+	}
+
+	return uint(i), nil
+
 }
