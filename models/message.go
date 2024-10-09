@@ -18,4 +18,7 @@ type Message struct {
 	ReceiverID  uint      `json:"receiver_id" gorm:"not null"`
 	GroupID     uint      `json:"group_id"`
 	Timestamp   time.Time `json:"timestamp" gorm:"not null"`
+
+	Sender   User `gorm:"foreignKey:SenderID"`
+	Receiver User `gorm:"foreignKey:ReceiverID"`
 }

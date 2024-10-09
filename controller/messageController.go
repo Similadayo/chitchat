@@ -1,10 +1,11 @@
 package controller
 
 import (
+	"encoding/json"
+	"github/similadayo/chitchat/config"
 	"github/similadayo/chitchat/models"
 	"github/similadayo/chitchat/utils"
 	"net/http"
-	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,268 +15,88 @@ type MessageController struct {
 	DB *gorm.DB
 }
 
-// send message
+func NewMessageController() *MessageController {
+	db, err := config.ConnectDB()
+	if err != nil {
+		panic(err)
+	}
+
+	config.MigrateDB(db)
+
+	return &MessageController{DB: db}
+}
+
+// Func SendMessage is used to send a message to a user or a group
 func (mc *MessageController) SendMessage(w http.ResponseWriter, r *http.Request) {
-	// Get the sender ID from the context
+	var message models.Message
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	senderID, ok := utils.GetUserFromContext(r.Context())
 	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	// Get the receiver ID from the request
-	receiverID, err := strconv.Atoi(r.FormValue("receiver_id"))
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid receiver ID")
+	var sender models.User
+	if err := mc.DB.Where("username = ?", senderID).First(&sender).Error; err != nil {
+		http.Error(w, "Sender not found", http.StatusNotFound)
 		return
 	}
 
-	// Get the message content from the request
-	content := r.FormValue("content")
-	if content == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Message content is required")
+	message.SenderID = sender.ID
+	message.Timestamp = time.Now()
+
+	//validate receiver
+	var receiver models.User
+	if err := mc.DB.First(&receiver, message.ReceiverID).Error; err != nil {
+		http.Error(w, "Receiver not found", http.StatusNotFound)
 		return
 	}
 
-	// Convert senderID to uint
-	senderIDUint, err := strconv.ParseUint(senderID, 10, 32)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid sender ID")
+	if err := mc.DB.Create(&message).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Create a new message
-	message := models.Message{
-		Content:     content,
-		ImageURL:    r.FormValue("image_url"),
-		IsDelivered: false, // Initially set to false when sent
-		IsRead:      false, // Initially set to false when sent
-		IsEdited:    false,
-		IsDeleted:   false,
-		SenderID:    uint(senderIDUint),
-		ReceiverID:  uint(receiverID),
-		Timestamp:   time.Now(),
-	}
-
-	// Save the message to the database
-	err = mc.DB.Create(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to send message")
-		return
-	}
-
-	// Respond with the message
-	utils.RespondWithJSON(w, http.StatusCreated, message)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Message sent successfully"})
 }
 
-// get messages
+// Func GetMessages is used to get all messages sent to a user or a group
 func (mc *MessageController) GetMessages(w http.ResponseWriter, r *http.Request) {
-	// Get the sender ID from the context
-	senderID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
+	senderID := r.URL.Query().Get("sender_id")
+	receiverID := r.URL.Query().Get("receiver_id")
 
-	// Get the receiver ID from the request
-	receiverID, err := strconv.Atoi(r.FormValue("receiver_id"))
+	receiverIDuint, err := utils.ConvertToUint(receiverID)
 	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid receiver ID")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Get the messages from the database
 	var messages []models.Message
-	err = mc.DB.Where("(sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)", senderID, receiverID, receiverID, senderID).Find(&messages).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to get messages")
+	if err := mc.DB.Where("(sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)", senderID, receiverID, receiverID, senderID).
+		Preload("Sender").
+		Preload("Receiver").
+		Find(&messages).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Respond with the messages
-	utils.RespondWithJSON(w, http.StatusOK, messages)
-}
-
-// MarkAsRead marks a message as read
-func (mc *MessageController) MarkAsRead(w http.ResponseWriter, r *http.Request) {
-	// Get the receiver ID from the context
-	receiverID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
+	// Update the IsDelivered field for messages sent to the current user
+	for i := range messages {
+		if messages[i].ReceiverID == uint(receiverIDuint) && !messages[i].IsDelivered {
+			messages[i].IsDelivered = true
+			if err := mc.DB.Model(&messages[i]).Update("is_delivered", true).Error; err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
-	// Get the message ID from the request
-	messageID, err := strconv.Atoi(r.FormValue("message_id"))
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid message ID")
-		return
-	}
-
-	// Get the message from the database
-	var message models.Message
-	err = mc.DB.Where("id = ? AND receiver_id = ?", messageID, receiverID).First(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusNotFound, "Message not found")
-		return
-	}
-
-	// Mark the message as read
-	message.IsRead = true
-
-	// Save the message to the database
-	err = mc.DB.Save(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to mark message as read")
-		return
-	}
-
-	// Respond with the message
-	utils.RespondWithJSON(w, http.StatusOK, message)
-}
-
-// MarkAsDelivered marks a message as delivered
-func (mc *MessageController) MarkAsDelivered(w http.ResponseWriter, r *http.Request) {
-	// Get the receiver ID from the context
-	receiverID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	// Get the message ID from the request
-	messageID, err := strconv.Atoi(r.FormValue("message_id"))
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid message ID")
-		return
-	}
-
-	// Get the message from the database
-	var message models.Message
-	err = mc.DB.Where("id = ? AND receiver_id = ?", messageID, receiverID).First(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusNotFound, "Message not found")
-		return
-	}
-
-	// Mark the message as delivered
-	message.IsDelivered = true
-
-	// Save the message to the database
-	err = mc.DB.Save(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to mark message as delivered")
-		return
-	}
-
-	// Respond with the message
-	utils.RespondWithJSON(w, http.StatusOK, message)
-}
-
-// EditMessage edits a message
-func (mc *MessageController) EditMessage(w http.ResponseWriter, r *http.Request) {
-	// Get the sender ID from the context
-	senderID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	// Get the message ID from the request
-	messageID, err := strconv.Atoi(r.FormValue("message_id"))
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid message ID")
-		return
-	}
-
-	// Get the new message content from the request
-	content := r.FormValue("content")
-	if content == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Message content is required")
-		return
-	}
-
-	// Get the message from the database
-	var message models.Message
-	err = mc.DB.Where("id = ? AND sender_id = ?", messageID, senderID).First(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusNotFound, "Message not found")
-		return
-	}
-
-	// Update the message content
-	message.Content = content
-
-	// Save the message to the database
-	err = mc.DB.Save(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to edit message")
-		return
-	}
-
-	// Respond with the message
-	utils.RespondWithJSON(w, http.StatusOK, message)
-}
-
-// DeleteMessage deletes a message
-func (mc *MessageController) DeleteMessage(w http.ResponseWriter, r *http.Request) {
-	// Get the sender ID from the context
-	senderID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	// Get the message ID from the request
-	messageID, err := strconv.Atoi(r.FormValue("message_id"))
-	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid message ID")
-		return
-	}
-
-	// Get the message from the database
-	var message models.Message
-	err = mc.DB.Where("id = ? AND sender_id = ?", messageID, senderID).First(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusNotFound, "Message not found")
-		return
-	}
-
-	// Delete the message from the database
-	err = mc.DB.Delete(&message).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to delete message")
-		return
-	}
-
-	// Respond with success
-	utils.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Message deleted"})
-}
-
-// SearchMessages searches for messages
-func (mc *MessageController) SearchMessages(w http.ResponseWriter, r *http.Request) {
-	// Get the sender ID from the context
-	senderID, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	// Get the search query from the request
-	query := r.FormValue("query")
-	if query == "" {
-		utils.RespondWithError(w, http.StatusBadRequest, "Search query is required")
-		return
-	}
-
-	// Get the messages from the database
-	var messages []models.Message
-	err := mc.DB.Where("(sender_id = ? OR receiver_id = ?) AND content LIKE ?", senderID, senderID, "%"+query+"%").Find(&messages).Error
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to search messages")
-		return
-	}
-
-	// Respond with the messages
-	utils.RespondWithJSON(w, http.StatusOK, messages)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(messages)
 }
