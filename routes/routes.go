@@ -34,6 +34,8 @@ func InitRoutes() *mux.Router {
 	protected.HandleFunc("/sendmessage", messageController.SendMessage).Methods("POST")
 	protected.HandleFunc("/getmessage", messageController.GetMessages).Methods("GET")
 
+	//websocket
+	router.HandleFunc("/ws", controller.WebSocketHandler).Methods("GET")
 	return router
 
 }
